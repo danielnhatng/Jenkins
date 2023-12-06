@@ -1,0 +1,16 @@
+[Unit]
+Description=Pet Clnic
+After=syslog.target
+After=network.target[Service]
+User=root
+Type=simple
+
+[Service]
+ExecStart=/usr/bin/java -Dserver.port={{app.PORT}} -jar {{app.dest}}  --server.servlet.context-path=/{{app.BRANCH}}
+Restart=always 
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=petclinic
+
+[Install]
+WantedBy=multi-user.target

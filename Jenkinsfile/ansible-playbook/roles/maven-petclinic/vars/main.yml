@@ -1,0 +1,22 @@
+---
+# vars file for maven-petclinic
+
+java:
+  ubuntu: openjdk-17-jre-headless 
+  home: /usr/lib/jvm/java-17-openjdk-amd64
+  
+  centos:
+    package: https://download.oracle.com/java/17/archive/jdk-17.0.8_linux-x64_bin.rpm
+    dest: /tmp/java-17.rpm
+
+app:
+  dir: "{{app_install_dir}}"
+  dest: "{{app_install_file}}"
+  PORT: "{{PORT}}"
+  BRANCH: "{{BRANCH}}"
+
+nexus:
+  link: "{{nexus_link}}"
+
+remote_key: "{{remote_key}}"
+
