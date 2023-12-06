@@ -1,0 +1,10 @@
+---
+# vars file for nginx
+
+dependencies: [wget, epel-release]
+nginx: "nginx"
+
+
+# PORT: "{{PORT}}"
+
+# BRANCH: "{{BRANCH}}"

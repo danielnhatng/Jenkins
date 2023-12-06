@@ -1,0 +1,46 @@
+- name: donwload java package
+  get_url:
+    url: "{{java.centos.package}}"
+    dest: "{{java.centos.dest}}"
+
+- name: install java
+  yum:
+    name: '{{java.centos.dest}}'
+    state: present
+
+# - name: Install docker
+#   yum:
+#     name: docker
+#     state: present
+    
+
+- name: Create application directory
+  file:
+    path: "{{app.dir}}"
+    state: directory
+
+- name: Download jar file from Nexus Artifact
+  get_url:
+    url: "{{nexus.link}}"
+    dest: "{{app.dest}}"
+    mode: 0755
+
+
+- name: Config petclinic services
+  template:
+    src: pet-clinic.service.j2
+    dest: "/etc/systemd/system/pet-clinic-{{app.BRANCH}}.service"
+
+- name: daemon-reload
+  shell: sudo systemctl daemon-reload
+
+- name: restart service
+  service:
+    name: "pet-clinic-{{app.BRANCH}}.service"
+    state: restarted
+    enabled: true
+
+
+# - name: Start the application
+#   shell: "java -jar {{app.dest}} &"
+

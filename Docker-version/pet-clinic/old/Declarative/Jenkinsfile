@@ -1,0 +1,229 @@
+pipeline {
+    agent any
+    
+    tools {
+        maven "maven3"
+        jdk "OracleJDK17"
+    }
+    environment {
+        //Nexus
+        SNAP_REPO = 'petclinic-snapshot'
+        NEXUS_USER = 'admin'
+        NEXUS_PASS = '1'
+        RELEASE_REPO = 'petclinic-release'
+        CENTRAL_REPO = 'petclinic-maven-central'
+        NEXUS_IP = '159.223.51.62'
+        NEXUS_PORT = '8081'
+        NEXUS_GRP_REPO = 'petclinic-maven-group'
+        NEXUS_LOGIN = 'nexuslogin'
+        // BUILD_VERSION = "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}"" remove timestamp for installation with JAVA
+        BUILD_VERSION = "${env.BUILD_ID}"
+        NEXUS_LINK = "http://${NEXUS_USER}:${NEXUS_PASS}@${NEXUS_IP}:${NEXUS_PORT}/repository/petclinic-release/QA/petclinic-app/${BUILD_VERSION}/petclinic-app-${BUILD_VERSION}.jar"
+        
+        //Sonarqube
+        SONARSERVER = 'sonarserver'
+        SONARSCANNER = 'sonarscanner'
+        PETCLINIC_REPO = 'petclinic-repo'
+        PETCLINIC_PROJECT_KEY = 'petclinic_profile'
+
+        scannerHome = tool "${SONARSCANNER}"
+
+        
+
+
+        //VM machine
+
+        
+    }
+
+    stages {
+        // stage('Clone source code') {
+        //     steps {
+        //         echo "Clone source code from gitlabg "
+        //         checkout scmGit(
+        //             branches: [[name: 'main']],
+        //             userRemoteConfigs: [[url: 'http://nhatnd19:nhatbigdick@143.198.193.73/s68/pet-clinic']])
+        //     }
+        // }
+        // stage('Check Ansible Installation') {
+        //     steps {
+        //         script {
+        //             def ansibleInstalled = sh(returnStatus: true, script: 'ansible --version')
+        //             def communityModuleInstalled = sh(returnStatus: true, script: 'ansible-galaxy collection list | grep community.general')
+
+        //             if (ansibleInstalled == 0 && communityModuleInstalled == 0) {
+        //                 echo 'Ansible and community module are already installed. Skipping installation.'
+        //                 return
+        //             }
+        //         }
+        //     }
+        // }
+
+        // stage('Install Ansible') {
+        //     steps {
+        //         script {
+        //             // Install Ansible
+        //             sh 'sudo apt install -y ansible'
+        //         }
+        //     }
+        // }
+
+        // stage('Install Ansible Community Module') {
+        //     steps {
+        //         script {
+        //             // Install Ansible Community Module
+        //             sh 'ansible-galaxy collection install community.general'
+        //         }
+        //     }
+        // }
+
+        // stage('Run Ansible Playbook') {
+        //     steps {
+        //         script {
+        //             // Run your Ansible playbook
+        //             sh 'ansible-playbook -i path/to/your/inventory.ini path/to/your/playbook.yml'
+        //         }
+        //     }
+        // }
+    
+        stage('Compile') {
+            steps {
+                echo "Compile package ******************************************************************"
+                sh 'chmod +x ./mvnw  && ./mvnw package  -Dcheckstyle.skip'
+            }
+        }
+        stage('Unit test') {
+            steps {
+                echo "Run Unittest *********************************************************************"
+                sh './mvnw test -Dcheckstyle.skip'
+            }
+        }
+
+        stage('Scan SonarQube') {
+            steps {
+                echo 'Scan SonarQube '
+                withSonarQubeEnv("${SONARSERVER}") {
+                    sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=petclinic_profile \
+                        -Dsonar.projectName=petclinic-repo \
+                        -Dsonar.projectVersion=1.0 \
+                        -Dsonar.sources=src/ \
+                        -Dsonar.java.binaries=target/ \
+                        -Dsonar.junit.reportsPath=target/surefire-reports/ \
+                        -Dsonar.jacoco.reportsPath=target/jacoco.exec \
+                        -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
+                }
+            }              
+        }
+        // stage('QUALITY GATE') {
+        //     steps{
+        //         timeout(time: 10, unit: 'MINUTES') {
+        //         waitForQualityGate abortPipeline: true
+        //         }
+        //     }
+        // }
+        stage('Deploy Nexus') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo 'Deploy Nexus '
+                    nexusArtifactUploader(
+                        nexusVersion: 'nexus3',
+                        protocol: 'http',
+                        nexusUrl: "${NEXUS_IP}:${NEXUS_PORT}",
+                        groupId: 'QA',
+                        version: "${BUILD_VERSION}",
+                        repository: "${RELEASE_REPO}",
+                        credentialsId: "${NEXUS_LOGIN}",
+                        artifacts: [
+                            [artifactId: 'petclinic-app' ,
+                            classifier: '',
+                            file: 'target/spring-petclinic-3.1.0-SNAPSHOT.jar',
+                            type: 'jar']
+                        ]
+                    )
+                }
+        }
+        stage('Deployment') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo 'Ansible play book to deploy app'
+                ansiblePlaybook(
+                    credentialsId: 'ansible_credential',
+                    installation: 'ansible1',
+                    disableHostKeyChecking: 'true',
+                    playbook: 'ansible-playbook/playbook.yml',
+                    inventory: 'ansible-playbook/inventory.ini',
+                    extraVars: [
+                        app_install_dir: '/lab/application',
+                        app_install_file: '/lab/application/petclinic.jar',
+                        nexus_link: "${NEXUS_LINK}",
+                        // nexus_link: "http://159.223.51.62:8081/repository/petclinic-release/QA/petclinic-app/61/petclinic-app-61.jar"
+                        // remote_key: "/root/.ssh/remote_key"
+                    ]
+                )
+            }
+        }
+        stage('Check health') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    def response = httpRequest 'http://178.128.94.24:8080'
+
+                    def statusCode = response.status
+
+                    if (statusCode >= 200 && statusCode <= 299) {
+                        echo 'Web app is healthy'
+                    }
+                    else {
+                        error "Web app is unhealthy. Status code: $statusCode"
+                    }
+                }
+            }
+        }
+    }
+
+    // Gmail notification, turn off to reduce junk
+    // post{
+    //     always {
+    //         echo 'One way or another, I have finished'
+        
+    //     }
+    //     success {
+    //         mail to: 'danielnhatng@gmail.com',
+    //         subject: "Success Pipeline: ${currentBuild.fullDisplayName}",
+    //         body: "Pipeline ${env.BUILD_URL} has run succesfully"
+    //     }
+        
+    //     unstable {
+    //         echo 'I am unstable :/'
+    //     }
+    //     failure {
+    //         // mail to: 'danielnhatng@gmail.com',
+    //         // subject: "Failed Pipeline: ${currentBuild.fullDisplayName}",
+    //         // body: "Something is wrong with ${env.BUILD_URL}"
+
+    //         //def console_output = "${env.BUILD_URL}/conso
+    //         mail bcc: '', body: "Details: ${env.JOB_NAME} Build Number: ${env.BUILD_NUMBER} Build: ${env.BUILD_URL} \
+    //         Console Output: ${env.BUILD_URL}/console", cc: '', from: 'noreply+jaas@sap.com', replyTo: '', subject: 'Pipline fail', to: 'danielnhatng@gmail.com'
+    //     }
+
+    //      def sendFailureEmail(stageName) {
+    //          emailext (
+    //              subject: "Pipeline Failed: ${env.JOB_NAME}",
+    //              body: "The Jenkins pipeline ${env.JOB_NAME} has failed at stage: ${stageName}. Please check the console output for more details.",
+    //              recipientProviders: [[$class: 'DevelopersRecipientProvider']],
+    //              attachLog: true
+    //          )
+    //      }
+    // }
+    options {
+        office365ConnectorWebhooks([
+            [name: "Office 365", url: "https://fptsoftware362.webhook.office.com/webhookb2/22a4c76f-9b43-476a-97ba-aa9efccbf616@f01e930a-b52e-42b1-b70f-a8882b5d043b/IncomingWebhook/21e5a5428b6f43f9b33b17f863fa12de/802f79b4-3a1c-4dd6-af21-353bf46dc864", notifyBackToNormal: true, notifyFailure: true, notifyRepeatedFailure: true, notifySuccess: true, notifyAborted: true]
+        ])
+    }
+}

@@ -1,0 +1,36 @@
+---
+# tasks file for nginx
+- include_vars: "main.yml"
+- name: install dependencies
+  yum:
+    name: "{{dependencies}}"
+
+- name: Install nginx
+  yum:
+    name: "{{nginx}}"
+    state: present
+
+- name: Nginx config
+  template:
+    src: nginx.conf
+    dest: /etc/nginx/conf.d/default.conf
+
+- name: Run command with sudo
+  command: sudo bash -c "cat /var/log/audit/audit.log | grep nginx | grep denied | audit2allow -M mynginx"
+  register: audit_output
+  changed_when: false
+
+- name: Load SELinux module
+  command: sudo semodule -i mynginx.pp
+  when: audit_output.stdout_lines | length > 0
+
+# - name: nginx Permission
+#   shell: |
+#     sudo cat /var/log/audit/audit.log | grep nginx | grep denied | audit2allow -M mynginx 
+#     sudo semodule -i mynginx.pp
+    
+- name: Restart nginx
+  service:
+    name: nginx
+    state: restarted
+

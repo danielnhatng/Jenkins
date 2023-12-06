@@ -1,0 +1,29 @@
+- name: install java
+  apt:
+    name: '{{java.Ubuntu}}'
+    state: present
+
+- name: Create application directory
+  file:
+    path: "{{app.dir}}"
+    state: directory
+
+- name: Download jar file from Nexus Artifact
+  get_url:
+    url: "{{nexus.link}}"
+    dest: "{{app.dest}}"
+    mode: 0755
+
+- name: Setup java environment
+  lineinfile:
+    dest: 
+    line: "JAVA_HOME={{java_home}}"
+    validate: "/usr/bin/java -version"
+    state: present
+
+- name: Restart shell session to apply environment variable
+  shell: exec bash
+
+- name: Start the application
+  shell: "java -jar {{app.dest}}"
+

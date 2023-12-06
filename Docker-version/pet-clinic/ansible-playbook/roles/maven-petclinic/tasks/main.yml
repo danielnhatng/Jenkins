@@ -1,0 +1,5 @@
+---
+# tasks file for maven-petclinic
+- include_vars: "main.yml"
+
+- include: "distro/{{ansible_os_family}}.yml"
